@@ -108,7 +108,7 @@ interface Trip {
   caloriesCost?: number;
   carbonCost?: number;
   segments: SegmentReference[];
-  queryIsLeaveAfter?: boolean;
+  weightedScore: number;
 }
 
 interface SegmentReference {
@@ -116,13 +116,11 @@ interface SegmentReference {
   startTime: number;
   endTime: number;
   realTime?: boolean;
-  realTimeSource?: string;
-  realTimeDeparture?: number;
-  realTimeArrival?: number;
   serviceTripID?: string;
   serviceDirection?: string;
-  platform?: string;
-  notes?: string;
+  serviceNumber?: string;
+  serviceName?: string;
+  startPlatform?: string;
 }
 
 interface SegmentTemplate {
@@ -131,12 +129,9 @@ interface SegmentTemplate {
   type: string;
   from?: Location | StopLocation;
   to?: Location | StopLocation;
-  shapePoints?: Coordinate[];
-  streets?: string[];
   isContinuation?: boolean;
-  mini?: boolean;
   action?: string;
-  travelDirection?: string;
+  notes?: string;
 }
 
 interface ModeInfo {
@@ -251,6 +246,7 @@ function formatDateForTripGo(isoDateString: string): number {
 
 // Implementation of the routing function
 async function handleRouting(
+  key: string,
   fromLat: number,
   fromLng: number,
   toLat: number,
@@ -258,9 +254,8 @@ async function handleRouting(
   departureTime?: string,
   modes?: string[],
   maxWalkingTime?: number,
-  maxCyclingTime?: number,
   wheelchair?: boolean,
-  key: string,
+  limit?: number,
 ): Promise<string> {
   const url = new URL(`${TRIPGO_API_BASE_URL}/routing.json`);
 
@@ -280,18 +275,15 @@ async function handleRouting(
   }
 
   if (modes && modes.length > 0) {
-    url.searchParams.append("modes", modes.join(","));
+    modes.forEach((mode) => url.searchParams.append("modes", mode));
+    url.searchParams.append("allModes", "1");
   }
 
   // Configuration parameters
   url.searchParams.append("v", "11");
 
   if (maxWalkingTime) {
-    url.searchParams.append("wp", maxWalkingTime.toString());
-  }
-
-  if (maxCyclingTime) {
-    url.searchParams.append("cs", maxCyclingTime.toString());
+    url.searchParams.append("wm", maxWalkingTime.toString());
   }
 
   if (wheelchair !== undefined) {
@@ -306,26 +298,41 @@ async function handleRouting(
 
   const data = (await response.json()) as RoutingResponse;
 
-  // Check for error
   if (data.error) {
     throw new Error(`Routing failed: ${data.error}`);
   }
 
-  // Process and format the response for a cleaner output
+  // For each trip group, take the two best scoring trips (lowest score is better)
+  // and then return a maximum of `limit` trip groups
+  const selectedGroups =
+    data.groups
+      ?.map((group) => {
+        const sortedTrips = group.trips.sort(
+          (a, b) => a.weightedScore - b.weightedScore,
+        );
+        return {
+          trips: sortedTrips.slice(0, 2),
+          score: sortedTrips[0].weightedScore,
+        };
+      })
+      .sort((a, b) => a.score - b.score)
+      .slice(0, limit) || [];
+
   const formattedTrips =
-    data.groups?.flatMap((group) =>
+    selectedGroups.flatMap((group) =>
       group.trips.map((trip) => {
         const segments = trip.segments.map((segment) => {
           const template = data.segmentTemplates?.find(
             (t) => t.hashCode === segment.segmentTemplateHashCode,
           );
           return {
-            mode: template?.modeInfo.identifier || "unknown",
-            modeName: template?.modeInfo.alt || "Unknown Mode",
-            startTime: new Date(segment.startTime * 1000).toISOString(),
-            endTime: new Date(segment.endTime * 1000).toISOString(),
+            mode: template?.modeInfo.alt || "Unknown Mode",
             duration: Math.floor((segment.endTime - segment.startTime) / 60),
-            serviceTripID: segment.serviceTripID,
+            action: template?.action,
+            serviceName: segment.serviceName,
+            serviceNumber: segment.serviceNumber,
+            from: template?.from?.address,
+            to: template?.to?.address,
           };
         });
 
@@ -338,6 +345,7 @@ async function handleRouting(
           currency: trip.currencySymbol,
           caloriesCost: trip.caloriesCost,
           carbonCost: trip.carbonCost,
+          score: trip.weightedScore,
         };
       }),
     ) || [];
@@ -535,21 +543,22 @@ const tripgoRoutingParams = {
     .optional()
     .describe("ISO datetime string for departure time"),
   modes: z
-    .array(z.string())
+    .array(z.enum(["pt_pub", "cy_bic", "me_car", "ps_tax", "wa_wal"]))
     .optional()
-    .describe("Transportation modes to include"),
+    .describe("Transportation modes to include."),
   maxWalkingTime: z
     .number()
     .optional()
     .describe("Maximum walking time in minutes"),
-  maxCyclingTime: z
-    .number()
-    .optional()
-    .describe("Maximum cycling time in minutes"),
   wheelchair: z
     .boolean()
     .optional()
     .describe("Whether to include wheelchair accessible options"),
+  limit: z
+    .number()
+    .optional()
+    .default(3)
+    .describe("Maximum number of results to return"),
 };
 
 const tripgoRoutingTool = {
@@ -560,6 +569,7 @@ const tripgoRoutingTool = {
   execute: (key: string) => async (params: any) => {
     try {
       const result = await handleRouting(
+        key,
         params.fromLat,
         params.fromLng,
         params.toLat,
@@ -567,8 +577,8 @@ const tripgoRoutingTool = {
         params.departureTime,
         params.modes,
         params.maxWalkingTime,
-        params.maxCyclingTime,
         params.wheelchair,
+        params.limit,
       );
       return {
         content: [{ type: "text" as const, text: String(result) }],
