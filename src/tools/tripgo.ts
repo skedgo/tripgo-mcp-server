@@ -1,11 +1,23 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-const TRIPGO_API_KEY = "...";
 const TRIPGO_API_BASE_URL = "https://api.tripgo.com/v1";
 
-export function registerTripGoTools(server: McpServer) {
-  server.tool("tripgo-routing", tripgoRoutingParams, tripgoRoutingTool.execute);
+export function registerTripGoTools(server: McpServer, env: any) {
+  const TRIPGO_API_KEY = env.TRIPGO_API_KEY;
+
+  // Check if API key is available
+  if (!TRIPGO_API_KEY) {
+    console.error(
+      "TripGo API key is missing! Tools may not function correctly.",
+    );
+  }
+
+  server.tool(
+    "tripgo-routing",
+    tripgoRoutingParams,
+    tripgoRoutingTool.execute(TRIPGO_API_KEY),
+  );
   // server.tool("tripgo-locations", tripgoLocationsTool);
   // server.tool("tripgo-departures", tripgoDeparturesTool);
 }
@@ -248,6 +260,7 @@ async function handleRouting(
   maxWalkingTime?: number,
   maxCyclingTime?: number,
   wheelchair?: boolean,
+  key: string,
 ): Promise<string> {
   const url = new URL(`${TRIPGO_API_BASE_URL}/routing.json`);
 
@@ -287,7 +300,7 @@ async function handleRouting(
 
   const response = await fetch(url.toString(), {
     headers: {
-      "X-TripGo-Key": TRIPGO_API_KEY,
+      "X-TripGo-Key": key,
     },
   });
 
@@ -544,7 +557,7 @@ const tripgoRoutingTool = {
   description:
     "Plan a trip between two locations with various transportation modes",
   parameters: z.object(tripgoRoutingParams),
-  execute: async (params: any) => {
+  execute: (key: string) => async (params: any) => {
     try {
       const result = await handleRouting(
         params.fromLat,

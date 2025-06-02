@@ -9,8 +9,17 @@ export class MyMCP extends McpAgent {
     version: "1.0.0",
   });
 
+  // Store environment variables
+  env: any;
+
+  // Constructor to receive environment
+  constructor(state: any, env: any) {
+    super(state, env);
+    this.env = env;
+  }
+
   async init() {
-    registerAllTools(this.server);
+    registerAllTools(this.server, this.env);
   }
 }
 
