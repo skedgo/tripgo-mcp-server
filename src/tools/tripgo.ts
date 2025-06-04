@@ -18,6 +18,13 @@ export function registerTripGoTools(server: McpServer, env: any) {
     tripgoRoutingParams,
     tripgoRoutingTool.execute(TRIPGO_API_KEY),
   );
+
+  server.tool(
+    "tripgo-get-trip-url",
+    tripgoSaveParams,
+    tripgoSaveTool.execute(TRIPGO_API_KEY),
+  );
+
   // server.tool("tripgo-locations", tripgoLocationsTool);
   // server.tool("tripgo-departures", tripgoDeparturesTool);
 }
@@ -109,6 +116,7 @@ interface Trip {
   carbonCost?: number;
   segments: SegmentReference[];
   weightedScore: number;
+  saveURL?: string;
 }
 
 interface SegmentReference {
@@ -244,7 +252,6 @@ function formatDateForTripGo(isoDateString: string): number {
   return Math.floor(date.getTime() / 1000);
 }
 
-// Implementation of the routing function
 async function handleRouting(
   key: string,
   fromLat: number,
@@ -346,6 +353,7 @@ async function handleRouting(
           caloriesCost: trip.caloriesCost,
           carbonCost: trip.carbonCost,
           score: trip.weightedScore,
+          url: trip.saveURL,
         };
       }),
     ) || [];
@@ -369,7 +377,32 @@ async function handleRouting(
   );
 }
 
-// Implementation of the locations search function
+interface SaveTripResponse extends TripGoResponse {
+  url: string;
+}
+
+async function handleSaveTrip(key: string, url: string): Promise<string> {
+  const response = await fetch(url, {
+    headers: {
+      "X-TripGo-Key": key,
+    },
+  });
+
+  const data = (await response.json()) as SaveTripResponse;
+
+  if (data.error) {
+    throw new Error(`Routing failed: ${data.error}`);
+  }
+
+  return JSON.stringify(
+    {
+      url: data.url,
+    },
+    null,
+    2,
+  );
+}
+
 async function handleLocationsSearch(
   lat: number,
   lng: number,
@@ -587,6 +620,35 @@ const tripgoRoutingTool = {
     } catch (error) {
       throw new Error(
         `Error in tripgo_routing: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  },
+};
+
+const tripgoSaveParams = {
+  tripURL: z
+    .string()
+    .url()
+    .describe(
+      "URL of the trip to fetch as previously returned by tripgo_routing",
+    ),
+};
+
+const tripgoSaveTool = {
+  name: "tripgo_save",
+  description:
+    "Retrieves a persistent URL of a trip returned by tripgo_routing, which can be opened in a web browser.",
+  parameters: z.object(tripgoSaveParams),
+  execute: (key: string) => async (params: any) => {
+    try {
+      const result = await handleSaveTrip(key, params.tripURL);
+      return {
+        content: [{ type: "text" as const, text: String(result) }],
+        structuredContent: JSON.parse(result),
+      };
+    } catch (error) {
+      throw new Error(
+        `Error in tripgo_save: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   },
