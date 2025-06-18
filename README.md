@@ -41,7 +41,7 @@ Restart Claude and you should see the tools become available.
 
 - Create a copy of `.env.example` and rename it to `.env` and set an API key
 - Install dependencies with `npm install`
-- Start the server with `npm run dev`
+- Start the server with `npm run dev:local`
 
 The configure Claude:
 
