@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { log } from "node:console";
 
 const TRIPGO_API_BASE_URL = "https://api.tripgo.com/v1";
 
@@ -25,8 +26,17 @@ export function registerTripGoTools(server: McpServer, env: any) {
     tripgoSaveTool.execute(TRIPGO_API_KEY),
   );
 
-  // server.tool("tripgo-locations", tripgoLocationsTool);
-  // server.tool("tripgo-departures", tripgoDeparturesTool);
+  server.tool(
+    "tripgo-locations",
+    tripgoLocationsParams,
+    tripgoLocationsTool.execute(TRIPGO_API_KEY),
+  );
+
+  server.tool(
+    "tripgo-departures",
+    tripgoDeparturesParams,
+    tripgoDeparturesTool.execute(TRIPGO_API_KEY),
+  );
 }
 
 // Type definitions for the TripGo API responses
@@ -40,16 +50,19 @@ interface RoutingResponse extends TripGoResponse {
   segmentTemplates?: SegmentTemplate[];
 }
 
+interface LocationGroup {
+  key: string;
+  hashCode: number;
+  stops?: StopLocation[];
+  bikePods?: BikePodLocation[];
+  carParks?: CarParkLocation[];
+  carPods?: CarPodLocation[];
+  carRentals?: CarRentalLocation[];
+  freeFloating?: FreeFloatingVehicleLocation[];
+}
+
 interface LocationsResponse extends TripGoResponse {
-  locations?: (
-    | Location
-    | StopLocation
-    | BikePodLocation
-    | CarParkLocation
-    | CarPodLocation
-    | CarRentalLocation
-    | FreeFloatingVehicleLocation
-  )[];
+  groups?: LocationGroup[];
 }
 
 interface DeparturesResponse extends TripGoResponse {
@@ -233,11 +246,6 @@ interface ServiceDeparture {
   alerts?: RealTimeAlert[];
 }
 
-interface RoutingQuery {
-  from: Coordinate;
-  to: Coordinate;
-}
-
 // Location subtypes
 interface BikePodLocation extends StopLocation {}
 interface CarParkLocation extends StopLocation {}
@@ -282,7 +290,9 @@ async function handleRouting(
   }
 
   if (modes && modes.length > 0) {
-    modes.forEach((mode) => url.searchParams.append("modes", mode));
+    for (const mode of modes) {
+      url.searchParams.append("modes", mode);
+    }
     url.searchParams.append("allModes", "1");
   }
 
@@ -404,10 +414,12 @@ async function handleSaveTrip(key: string, url: string): Promise<string> {
 }
 
 async function handleLocationsSearch(
+  key: string,
   lat: number,
   lng: number,
   radius?: number,
   modes?: string[],
+  limit?: number,
 ): Promise<string> {
   const url = new URL(`${TRIPGO_API_BASE_URL}/locations.json`);
 
@@ -424,9 +436,13 @@ async function handleLocationsSearch(
     url.searchParams.append("modes", modes.join(","));
   }
 
+  if (limit) {
+    url.searchParams.append("limit", limit.toString());
+  }
+
   const response = await fetch(url.toString(), {
     headers: {
-      "X-TripGo-Key": TRIPGO_API_KEY,
+      "X-TripGo-Key": key,
     },
   });
 
@@ -438,26 +454,110 @@ async function handleLocationsSearch(
   }
 
   // Process and format the response for a cleaner output
-  const formattedLocations = data.locations?.map((location) => {
-    return {
-      lat: location.lat,
-      lng: location.lng,
-      name: location.name || "",
-      address: location.address || "",
-      type: "StopLocation" in location ? "stop" : "location",
-      code: "code" in location ? location.code : undefined,
-      region: "region" in location ? location.region : undefined,
-      services: "services" in location ? location.services : undefined,
-    };
+  const formattedLocations: any[] = [];
+
+  data.groups?.forEach((group) => {
+    // Process stops
+    group.stops?.forEach((location) => {
+      formattedLocations.push({
+        lat: location.lat,
+        lng: location.lng,
+        name: location.name || "",
+        type: "stop",
+        code: location.code,
+        region: location.region,
+        services: location.services,
+      });
+    });
+
+    // Process bike pods
+    group.bikePods?.forEach((location) => {
+      formattedLocations.push({
+        lat: location.lat,
+        lng: location.lng,
+        name: location.name || "",
+        address: location.address || "",
+        type: "bikePod",
+        code: location.code,
+        region: location.region,
+      });
+    });
+
+    // Process car parks
+    group.carParks?.forEach((location) => {
+      formattedLocations.push({
+        lat: location.lat,
+        lng: location.lng,
+        name: location.name || "",
+        address: location.address || "",
+        type: "carPark",
+        code: location.code,
+        region: location.region,
+      });
+    });
+
+    // Process car pods
+    group.carPods?.forEach((location) => {
+      formattedLocations.push({
+        lat: location.lat,
+        lng: location.lng,
+        name: location.name || "",
+        address: location.address || "",
+        type: "carPod",
+        code: location.code,
+        region: location.region,
+      });
+    });
+
+    // Process car rentals
+    group.carRentals?.forEach((location) => {
+      formattedLocations.push({
+        lat: location.lat,
+        lng: location.lng,
+        name: location.name || "",
+        address: location.address || "",
+        type: "carRental",
+        code: location.code,
+        region: location.region,
+      });
+    });
+
+    // Process free floating vehicles
+    group.freeFloating?.forEach((location) => {
+      formattedLocations.push({
+        lat: location.lat,
+        lng: location.lng,
+        name: location.name || "",
+        address: location.address || "",
+        type: "freeFloating",
+        code: location.code,
+        region: location.region,
+      });
+    });
   });
 
   return JSON.stringify(
     {
       locations: formattedLocations,
+      groups: data.groups?.map((group) => ({
+        key: group.key,
+        hashCode: group.hashCode,
+        locationCounts: {
+          stops: group.stops?.length || 0,
+          bikePods: group.bikePods?.length || 0,
+          carParks: group.carParks?.length || 0,
+          carPods: group.carPods?.length || 0,
+          carRentals: group.carRentals?.length || 0,
+          freeFloating: group.freeFloating?.length || 0,
+        },
+      })),
+      totalLocations: formattedLocations.length,
       query: {
         lat,
         lng,
         radius,
+        modes,
+        limit,
       },
     },
     null,
@@ -467,6 +567,7 @@ async function handleLocationsSearch(
 
 // Implementation of the departures function
 async function handleDepartures(
+  key: string,
   region: string,
   stopCodes: string[],
   timeStamp?: string,
@@ -485,14 +586,12 @@ async function handleDepartures(
     requestBody.timeStamp = formatDateForTripGo(timeStamp);
   }
 
-  if (limit) {
-    requestBody.limit = limit;
-  }
+  requestBody.limit = limit || 10;
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      "X-TripGo-Key": TRIPGO_API_KEY,
+      "X-TripGo-Key": key,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(requestBody),
@@ -509,53 +608,52 @@ async function handleDepartures(
   const formattedDepartures: any[] = [];
 
   // Process embarkationStops which contains the services (departures)
-  data.embarkationStops?.forEach((embarkationStop) => {
-    const stopCode = embarkationStop.stopCode;
-    const stop = data.stops?.find((s) => s.code === stopCode);
+  if (data.embarkationStops) {
+    for (const embarkationStop of data.embarkationStops) {
+      const stopCode = embarkationStop.stopCode;
+      const stop = data.stops?.find((s) => s.code === stopCode);
 
-    // Process each service in the embarkation stop
-    embarkationStop.services?.forEach((service) => {
-      formattedDepartures.push({
-        stopCode: stopCode,
-        stopName: stop?.name,
-        scheduledDeparture: new Date(service.startTime * 1000).toISOString(),
-        realTimeDeparture: service.realTimeDeparture
-          ? new Date(service.realTimeDeparture * 1000).toISOString()
-          : undefined,
-        realTime: service.realTimeStatus === "IS_REAL_TIME",
-        service: {
-          id: service.serviceTripID,
-          name: service.serviceName,
-          number: service.serviceNumber,
-          direction: service.serviceDirection,
-          operator: service.operator,
-          operatorID: service.operatorID,
-          mode: service.mode,
-          routeID: service.routeID,
-          color: service.serviceColor,
-          textColor: service.serviceTextColor,
-        },
-        wheelchairAccessible: service.wheelchairAccessible,
-        vehicle: service.realtimeVehicle
-          ? {
-              id: service.realtimeVehicle.id,
-              label: service.realtimeVehicle.label,
-              lastUpdate: new Date(
-                service.realtimeVehicle.lastUpdate * 1000,
-              ).toISOString(),
-              location: service.realtimeVehicle.location,
-              occupancy: service.realtimeVehicle.occupancy,
-              wifi: service.realtimeVehicle.wifi,
-            }
-          : undefined,
-      });
-    });
-  });
+      // Process each service in the embarkation stop
+      if (embarkationStop.services) {
+        for (const service of embarkationStop.services) {
+          formattedDepartures.push({
+            scheduledDeparture: new Date(
+              service.startTime * 1000,
+            ).toISOString(),
+            realTimeDeparture: service.realTimeDeparture
+              ? new Date(service.realTimeDeparture * 1000).toISOString()
+              : undefined,
+            realTime: service.realTimeStatus === "IS_REAL_TIME",
+            service: {
+              id: service.serviceTripID,
+              name: service.serviceName,
+              number: service.serviceNumber,
+              direction: service.serviceDirection,
+              operator: service.operator,
+              mode: service.mode,
+            },
+            wheelchairAccessible: service.wheelchairAccessible,
+            vehicle: service.realtimeVehicle
+              ? {
+                  id: service.realtimeVehicle.id,
+                  label: service.realtimeVehicle.label,
+                  lastUpdate: new Date(
+                    service.realtimeVehicle.lastUpdate * 1000,
+                  ).toISOString(),
+                  location: service.realtimeVehicle.location,
+                  occupancy: service.realtimeVehicle.occupancy,
+                  wifi: service.realtimeVehicle.wifi,
+                }
+              : undefined,
+          });
+        }
+      }
+    }
+  }
 
   return JSON.stringify(
     {
       departures: formattedDepartures,
-      stops: data.stops,
       query: {
         region,
         stopCodes,
@@ -654,26 +752,39 @@ const tripgoSaveTool = {
   },
 };
 
+const tripgoLocationsParams = {
+  lat: z.number().describe("Latitude of the search center"),
+  lng: z.number().describe("Longitude of the search center"),
+  radius: z.number().optional().describe("Search radius in meters"),
+  modes: z
+    .array(z.string())
+    .optional()
+    .describe("Transportation modes to include in results"),
+  limit: z
+    .number()
+    .optional()
+    .default(10)
+    .describe("Maximum number of locations to return"),
+};
+
 const tripgoLocationsTool = {
   name: "tripgo_locations",
   description: "Search for locations near a specified point",
-  parameters: z.object({
-    lat: z.number().describe("Latitude of the search center"),
-    lng: z.number().describe("Longitude of the search center"),
-    radius: z.number().optional().describe("Search radius in meters"),
-    modes: z
-      .array(z.string())
-      .optional()
-      .describe("Transportation modes to include in results"),
-  }),
-  execute: async (params: any) => {
+  parameters: z.object(tripgoLocationsParams),
+  execute: (key: string) => async (params: any) => {
     try {
-      return await handleLocationsSearch(
+      const result = await handleLocationsSearch(
+        key,
         params.lat,
         params.lng,
         params.radius,
         params.modes,
+        params.limit,
       );
+      return {
+        content: [{ type: "text" as const, text: String(result) }],
+        structuredContent: JSON.parse(result),
+      };
     } catch (error) {
       throw new Error(
         `Error in tripgo_locations: ${error instanceof Error ? error.message : String(error)}`,
@@ -682,31 +793,38 @@ const tripgoLocationsTool = {
   },
 };
 
+const tripgoDeparturesParams = {
+  region: z.string().describe("Region code for the transit system"),
+  stopCodes: z
+    .array(z.string())
+    .describe("List of stop codes to get departures for"),
+  timeStamp: z
+    .string()
+    .optional()
+    .describe("ISO datetime string for departure time"),
+  limit: z
+    .number()
+    .default(10)
+    .describe("Maximum number of departures to return"),
+};
+
 const tripgoDeparturesTool = {
   name: "tripgo_departures",
   description: "Get departures from a list of stops",
-  parameters: z.object({
-    region: z.string().describe("Region code for the transit system"),
-    stopCodes: z
-      .array(z.string())
-      .describe("List of stop codes to get departures for"),
-    timeStamp: z
-      .string()
-      .optional()
-      .describe("ISO datetime string for departure time"),
-    limit: z
-      .number()
-      .optional()
-      .describe("Maximum number of departures to return"),
-  }),
-  execute: async (params: any) => {
+  parameters: z.object(tripgoDeparturesParams),
+  execute: (key: string) => async (params: any) => {
     try {
-      return await handleDepartures(
+      const result = await handleDepartures(
+        key,
         params.region,
         params.stopCodes,
         params.timeStamp,
         params.limit,
       );
+      return {
+        content: [{ type: "text" as const, text: String(result) }],
+        structuredContent: JSON.parse(result),
+      };
     } catch (error) {
       throw new Error(
         `Error in tripgo_departures: ${error instanceof Error ? error.message : String(error)}`,
