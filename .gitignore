@@ -3,3 +3,6 @@ node_modules
 # wrangler files
 .wrangler
 .dev.vars*
+
+# Environment variables
+.env
