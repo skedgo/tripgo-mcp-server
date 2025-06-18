@@ -1,37 +1,49 @@
-# Building a Remote MCP Server on Cloudflare (Without Auth)
+# TripGo MCP Server
 
-This example allows you to deploy a remote MCP server that doesn't require authentication on Cloudflare Workers. 
+The is a remote MCP server that wraps the TripGo API and provides the following tools:
 
-## Get started: 
+- `tripgo-locations`: Retrieve transport-related locations
+- `tripgo-departures`: Departures from a specific public transport stop
+- `tripgo-routing`: Mixed and multi-modal trip planning
+- `tripgo-get-trip-url`: Get the URL of a trip previously calculated using the `tripgo-routing` tool
 
-[![Deploy to Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-authless)
+The MCP server is deployed on Cloudflare Workers.
 
-This will deploy your MCP server to a URL like: `remote-mcp-server-authless.<your-account>.workers.dev/sse`
+## Connect directly to remove MCP
 
-Alternatively, you can use the command line below to get the remote MCP Server created on your local machine:
-```bash
-npm create cloudflare@latest -- my-mcp-server --template=cloudflare/ai/demos/remote-mcp-authless
-```
+The MCP server is deployed on Cloudflare Workers. You can connect to it directly using the URL `https://tripgo-mcp-server.skedgo-account.workers.dev/sse`.
 
-## Customizing your MCP Server
+## Connect Claude Desktop to public MCP server
 
-To add your own [tools](https://developers.cloudflare.com/agents/model-context-protocol/tools/) to the MCP server, define each tool inside the `init()` method of `src/index.ts` using `this.server.tool(...)`. 
-
-## Connect to Cloudflare AI Playground
-
-You can connect to your MCP server from the Cloudflare AI Playground, which is a remote MCP client:
-
-1. Go to https://playground.ai.cloudflare.com/
-2. Enter your deployed MCP server URL (`remote-mcp-server-authless.<your-account>.workers.dev/sse`)
-3. You can now use your MCP tools directly from the playground!
-
-## Connect Claude Desktop to your MCP server
-
-You can also connect to your remote MCP server from local MCP clients, by using the [mcp-remote proxy](https://www.npmjs.com/package/mcp-remote). 
+You can also connect to your remote MCP server from *local* MCP clients, by using the [mcp-remote proxy](https://www.npmjs.com/package/mcp-remote).
 
 To connect to your MCP server from Claude Desktop, follow [Anthropic's Quickstart](https://modelcontextprotocol.io/quickstart/user) and within Claude Desktop go to Settings > Developer > Edit Config.
 
-Update with this configuration:
+Use with this configuration:
+
+```json
+{
+  "mcpServers": {
+    "TripGo": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://tripgo-mcp-server.skedgo-account.workers.dev/sse"
+      ]
+    }
+  }
+}
+```
+
+Restart Claude and you should see the tools become available.
+
+## Development
+
+- Create a copy of `.env.example` and rename it to `.env` and set an API key
+- Install dependencies with `npm install`
+- Start the server with `npm run dev`
+
+The configure Claude:
 
 ```json
 {
@@ -40,11 +52,11 @@ Update with this configuration:
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://localhost:8787/sse"  // or remote-mcp-server-authless.your-account.workers.dev/sse
+        "http://localhost:8787/sse"
       ]
     }
   }
 }
 ```
 
-Restart Claude and you should see the tools become available. 
+Restart Claude and you should see the tools become available.
