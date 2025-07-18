@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { log } from "node:console";
+import { coordinateInPolygon, toISOStringInTimezone, zonedTimeToUtc } from "./helpers";
 
 const TRIPGO_API_BASE_URL = "https://api.tripgo.com/v1";
 
@@ -172,7 +173,7 @@ interface Color {
   blue: number;
 }
 
-interface Coordinate {
+export interface Coordinate {
   lat: number;
   lng: number;
 }
@@ -253,11 +254,51 @@ interface CarPodLocation extends StopLocation {}
 interface CarRentalLocation extends StopLocation {}
 interface FreeFloatingVehicleLocation extends StopLocation {}
 
+interface RegionsResponse {
+  regions: Region[];
+};
+
+interface Region {
+  name: string;
+  polygon: string;
+  timezone: string;
+}
+
 // Helper function to format date for TripGo API
-function formatDateForTripGo(isoDateString: string): number {
-  const date = new Date(isoDateString);
+function formatDateForTripGo(isoDateString: string, timezone: string = "UTC"): number {
+  // If already has timezone info, assume that timezone
+  if (isoDateString.includes('Z') || isoDateString.match(/[+-]\d{2}:\d{2}$/)) {
+    return Math.floor(new Date(isoDateString).getTime() / 1000);
+  }
+
+  // Otherwise, interpret it in the provided timezone.
+  const utcDate = zonedTimeToUtc(isoDateString, timezone);
   // TripGo API expects seconds since Unix epoch
-  return Math.floor(date.getTime() / 1000);
+  return Math.floor(utcDate.getTime() / 1000);
+}
+
+async function fetchRegions(key: string): Promise<RegionsResponse> {
+  const url = new URL(`${TRIPGO_API_BASE_URL}/regions.json`);
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-TripGo-Key": key,
+    },
+    body: JSON.stringify({
+      "v": 2
+    })
+  });
+  const data = (await response.json()) as RegionsResponse;
+  if (!data.regions) {
+    throw new Error(`Failed to fetch regions`);
+  }
+  return data;
+}
+
+async function getRegionForCoordinate(coordinate: Coordinate, key: string) {
+  const { regions } = await fetchRegions(key);
+  return regions.find(region => coordinateInPolygon(coordinate, region.polygon));
 }
 
 async function handleRouting(
@@ -272,7 +313,9 @@ async function handleRouting(
   wheelchair?: boolean,
   limit?: number,
 ): Promise<string> {
-  const url = new URL(`${TRIPGO_API_BASE_URL}/routing.json`);
+  const url = new URL(`${TRIPGO_API_BASE_URL}/routing.json`);  
+  const region = await getRegionForCoordinate({ lat: fromLat, lng: fromLng }, key);
+  const timezone = region?.timezone || "UTC";
 
   // Required parameters
   url.searchParams.append(
@@ -284,8 +327,8 @@ async function handleRouting(
   // Optional parameters
   if (departureTime) {
     url.searchParams.append(
-      "depart",
-      formatDateForTripGo(departureTime).toString(),
+      "departAfter",
+      formatDateForTripGo(departureTime, timezone).toString(),
     );
   }
 
@@ -354,8 +397,8 @@ async function handleRouting(
         });
 
         return {
-          depart: new Date(trip.depart * 1000).toISOString(),
-          arrive: new Date(trip.arrive * 1000).toISOString(),
+          depart: toISOStringInTimezone(new Date(trip.depart * 1000), timezone),          
+          arrive: toISOStringInTimezone(new Date(trip.arrive * 1000), timezone),
           totalDuration: Math.floor((trip.arrive - trip.depart) / 60),
           segments,
           cost: trip.moneyCost,
@@ -371,7 +414,7 @@ async function handleRouting(
   return JSON.stringify(
     {
       trips: formattedTrips,
-      query: {
+      query: {        
         from: {
           lat: fromLat,
           lng: fromLng,
@@ -379,7 +422,8 @@ async function handleRouting(
         to: {
           lat: toLat,
           lng: toLng,
-        },
+        },        
+        url: url.toString()
       },
     },
     null,
@@ -635,15 +679,15 @@ async function handleDepartures(
             wheelchairAccessible: service.wheelchairAccessible,
             vehicle: service.realtimeVehicle
               ? {
-                  id: service.realtimeVehicle.id,
-                  label: service.realtimeVehicle.label,
-                  lastUpdate: new Date(
-                    service.realtimeVehicle.lastUpdate * 1000,
-                  ).toISOString(),
-                  location: service.realtimeVehicle.location,
-                  occupancy: service.realtimeVehicle.occupancy,
-                  wifi: service.realtimeVehicle.wifi,
-                }
+                id: service.realtimeVehicle.id,
+                label: service.realtimeVehicle.label,
+                lastUpdate: new Date(
+                  service.realtimeVehicle.lastUpdate * 1000,
+                ).toISOString(),
+                location: service.realtimeVehicle.location,
+                occupancy: service.realtimeVehicle.occupancy,
+                wifi: service.realtimeVehicle.wifi,
+              }
               : undefined,
           });
         }
