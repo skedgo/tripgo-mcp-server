@@ -122,6 +122,7 @@ interface TripGroup {
 }
 
 interface Trip {
+  id: string;
   arrive: number;
   depart: number;
   moneyCost?: number;
@@ -397,6 +398,7 @@ async function handleRouting(
         });
 
         return {
+          id: trip.id,
           depart: toISOStringInTimezone(new Date(trip.depart * 1000), timezone),          
           arrive: toISOStringInTimezone(new Date(trip.arrive * 1000), timezone),
           totalDuration: Math.floor((trip.arrive - trip.depart) / 60),
