@@ -60,3 +60,12 @@ The configure Claude:
 ```
 
 Restart Claude and you should see the tools become available.
+
+## Deployment
+
+This is deployed locally currently, run:
+
+```bash
+npm install
+npm run deploy
+```
