@@ -309,6 +309,7 @@ async function handleRouting(
   toLat: number,
   toLng: number,
   departureTime?: string,
+  arrivalTime?: string,
   modes?: string[],
   maxWalkingTime?: number,
   wheelchair?: boolean,
@@ -330,6 +331,11 @@ async function handleRouting(
     url.searchParams.append(
       "departAfter",
       formatDateForTripGo(departureTime, timezone).toString(),
+    );
+  } else if (arrivalTime) {
+    url.searchParams.append(
+      "arriveBefore",
+      formatDateForTripGo(arrivalTime, timezone).toString(),
     );
   }
 
@@ -719,6 +725,10 @@ const tripgoRoutingParams = {
     .string()
     .optional()
     .describe("ISO datetime string for departure time"),
+  arrivalTime: z
+    .string()
+    .optional()
+    .describe("ISO datetime string for arrival time"),
   modes: z
     .array(z.enum(["pt_pub", "cy_bic", "me_car", "ps_tax", "wa_wal"]))
     .optional()
@@ -752,6 +762,7 @@ const tripgoRoutingTool = {
         params.toLat,
         params.toLng,
         params.departureTime,
+        params.arrivalTime,
         params.modes,
         params.maxWalkingTime,
         params.wheelchair,
