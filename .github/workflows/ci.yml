@@ -29,9 +29,6 @@ jobs:
       - name: Run linting
         run: npm run lint:fix
 
-      - name: Check Wrangler configuration
-        run: npx wrangler validate
-
       - name: Test compilation
         run: npx wrangler deploy --dry-run --outdir dist
         env:
