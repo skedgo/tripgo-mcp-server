@@ -439,13 +439,10 @@ async function handleRouting(
         to: {
           lat: toLat,
           lng: toLng,
-        },
-        url: url.toString(),
-      },
-    },
-    null,
-    2,
-  );
+        },        
+        url: url.toString()
+      }
+    });
 }
 
 interface SaveTripResponse extends TripGoResponse {
@@ -792,8 +789,7 @@ const tripgoRoutingTool = {
         params.limit,
       );
       return {
-        content: [{ type: "text" as const, text: String(result) }],
-        structuredContent: JSON.parse(result),
+        content: [{ type: "text" as const, text: String(result) }]
       };
     } catch (error) {
       throw new Error(
