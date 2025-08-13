@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { log } from "node:console";
-import { coordinateInPolygon, toISOStringInTimezone, zonedTimeToUtc } from "./helpers";
+import {
+  coordinateInPolygon,
+  toISOStringInTimezone,
+  zonedTimeToUtc,
+} from "./helpers";
 
 const TRIPGO_API_BASE_URL = "https://api.tripgo.com/v1";
 
@@ -257,7 +261,7 @@ interface FreeFloatingVehicleLocation extends StopLocation {}
 
 interface RegionsResponse {
   regions: Region[];
-};
+}
 
 interface Region {
   name: string;
@@ -266,9 +270,9 @@ interface Region {
 }
 
 // Helper function to format date for TripGo API
-function formatDateForTripGo(isoDateString: string, timezone: string = "UTC"): number {
+function formatDateForTripGo(isoDateString: string, timezone = "UTC"): number {
   // If already has timezone info, assume that timezone
-  if (isoDateString.includes('Z') || isoDateString.match(/[+-]\d{2}:\d{2}$/)) {
+  if (isoDateString.includes("Z") || isoDateString.match(/[+-]\d{2}:\d{2}$/)) {
     return Math.floor(new Date(isoDateString).getTime() / 1000);
   }
 
@@ -287,19 +291,21 @@ async function fetchRegions(key: string): Promise<RegionsResponse> {
       "X-TripGo-Key": key,
     },
     body: JSON.stringify({
-      "v": 2
-    })
+      v: 2,
+    }),
   });
   const data = (await response.json()) as RegionsResponse;
   if (!data.regions) {
-    throw new Error(`Failed to fetch regions`);
+    throw new Error("Failed to fetch regions");
   }
   return data;
 }
 
 async function getRegionForCoordinate(coordinate: Coordinate, key: string) {
   const { regions } = await fetchRegions(key);
-  return regions.find(region => coordinateInPolygon(coordinate, region.polygon));
+  return regions.find((region) =>
+    coordinateInPolygon(coordinate, region.polygon),
+  );
 }
 
 async function handleRouting(
@@ -315,8 +321,11 @@ async function handleRouting(
   wheelchair?: boolean,
   limit?: number,
 ): Promise<string> {
-  const url = new URL(`${TRIPGO_API_BASE_URL}/routing.json`);  
-  const region = await getRegionForCoordinate({ lat: fromLat, lng: fromLng }, key);
+  const url = new URL(`${TRIPGO_API_BASE_URL}/routing.json`);
+  const region = await getRegionForCoordinate(
+    { lat: fromLat, lng: fromLng },
+    key,
+  );
   const timezone = region?.timezone || "UTC";
 
   // Required parameters
@@ -405,7 +414,7 @@ async function handleRouting(
 
         return {
           id: trip.id,
-          depart: toISOStringInTimezone(new Date(trip.depart * 1000), timezone),          
+          depart: toISOStringInTimezone(new Date(trip.depart * 1000), timezone),
           arrive: toISOStringInTimezone(new Date(trip.arrive * 1000), timezone),
           totalDuration: Math.floor((trip.arrive - trip.depart) / 60),
           segments,
@@ -422,7 +431,7 @@ async function handleRouting(
   return JSON.stringify(
     {
       trips: formattedTrips,
-      query: {        
+      query: {
         from: {
           lat: fromLat,
           lng: fromLng,
@@ -430,8 +439,8 @@ async function handleRouting(
         to: {
           lat: toLat,
           lng: toLng,
-        },        
-        url: url.toString()
+        },
+        url: url.toString(),
       },
     },
     null,
@@ -508,85 +517,99 @@ async function handleLocationsSearch(
   // Process and format the response for a cleaner output
   const formattedLocations: any[] = [];
 
-  data.groups?.forEach((group) => {
-    // Process stops
-    group.stops?.forEach((location) => {
-      formattedLocations.push({
-        lat: location.lat,
-        lng: location.lng,
-        name: location.name || "",
-        type: "stop",
-        code: location.code,
-        region: location.region,
-        services: location.services,
-      });
-    });
+  if (data.groups) {
+    for (const group of data.groups) {
+      // Process stops
+      if (group.stops) {
+        for (const location of group.stops) {
+          formattedLocations.push({
+            lat: location.lat,
+            lng: location.lng,
+            name: location.name || "",
+            type: "stop",
+            code: location.code,
+            region: location.region,
+            services: location.services,
+          });
+        }
+      }
 
-    // Process bike pods
-    group.bikePods?.forEach((location) => {
-      formattedLocations.push({
-        lat: location.lat,
-        lng: location.lng,
-        name: location.name || "",
-        address: location.address || "",
-        type: "bikePod",
-        code: location.code,
-        region: location.region,
-      });
-    });
+      // Process bike pods
+      if (group.bikePods) {
+        for (const location of group.bikePods) {
+          formattedLocations.push({
+            lat: location.lat,
+            lng: location.lng,
+            name: location.name || "",
+            address: location.address || "",
+            type: "bikePod",
+            code: location.code,
+            region: location.region,
+          });
+        }
+      }
 
-    // Process car parks
-    group.carParks?.forEach((location) => {
-      formattedLocations.push({
-        lat: location.lat,
-        lng: location.lng,
-        name: location.name || "",
-        address: location.address || "",
-        type: "carPark",
-        code: location.code,
-        region: location.region,
-      });
-    });
+      // Process car parks
+      if (group.carParks) {
+        for (const location of group.carParks) {
+          formattedLocations.push({
+            lat: location.lat,
+            lng: location.lng,
+            name: location.name || "",
+            address: location.address || "",
+            type: "carPark",
+            code: location.code,
+            region: location.region,
+          });
+        }
+      }
 
-    // Process car pods
-    group.carPods?.forEach((location) => {
-      formattedLocations.push({
-        lat: location.lat,
-        lng: location.lng,
-        name: location.name || "",
-        address: location.address || "",
-        type: "carPod",
-        code: location.code,
-        region: location.region,
-      });
-    });
+      // Process car pods
+      if (group.carPods) {
+        for (const location of group.carPods) {
+          formattedLocations.push({
+            lat: location.lat,
+            lng: location.lng,
+            name: location.name || "",
+            address: location.address || "",
+            type: "carPod",
+            code: location.code,
+            region: location.region,
+          });
+        }
+      }
 
-    // Process car rentals
-    group.carRentals?.forEach((location) => {
-      formattedLocations.push({
-        lat: location.lat,
-        lng: location.lng,
-        name: location.name || "",
-        address: location.address || "",
-        type: "carRental",
-        code: location.code,
-        region: location.region,
-      });
-    });
+      // Process car rentals
+      if (group.carRentals) {
+        for (const location of group.carRentals) {
+          formattedLocations.push({
+            lat: location.lat,
+            lng: location.lng,
+            name: location.name || "",
+            address: location.address || "",
+            type: "carRental",
+            code: location.code,
+            region: location.region,
+          });
+        }
+      }
 
-    // Process free floating vehicles
-    group.freeFloating?.forEach((location) => {
-      formattedLocations.push({
-        lat: location.lat,
-        lng: location.lng,
-        name: location.name || "",
-        address: location.address || "",
-        type: "freeFloating",
-        code: location.code,
-        region: location.region,
-      });
-    });
-  });
+      // Process free floating vehicles
+      if (group.freeFloating) {
+        for (const location of group.freeFloating) {
+          formattedLocations.push({
+            lat: location.lat,
+            lng: location.lng,
+            name: location.name || "",
+            address: location.address || "",
+            type: "freeFloating",
+            code: location.code,
+            region: location.region,
+          });
+        }
+      }
+    }
+  }
 
   return JSON.stringify(
     {
@@ -687,15 +710,15 @@ async function handleDepartures(
             wheelchairAccessible: service.wheelchairAccessible,
             vehicle: service.realtimeVehicle
               ? {
-                id: service.realtimeVehicle.id,
-                label: service.realtimeVehicle.label,
-                lastUpdate: new Date(
-                  service.realtimeVehicle.lastUpdate * 1000,
-                ).toISOString(),
-                location: service.realtimeVehicle.location,
-                occupancy: service.realtimeVehicle.occupancy,
-                wifi: service.realtimeVehicle.wifi,
-              }
+                  id: service.realtimeVehicle.id,
+                  label: service.realtimeVehicle.label,
+                  lastUpdate: new Date(
+                    service.realtimeVehicle.lastUpdate * 1000,
+                  ).toISOString(),
+                  location: service.realtimeVehicle.location,
+                  occupancy: service.realtimeVehicle.occupancy,
+                  wifi: service.realtimeVehicle.wifi,
+                }
               : undefined,
           });
         }
