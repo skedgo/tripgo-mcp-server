@@ -1,0 +1,44 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    name: Build and Test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run type check
+        run: npm run type-check
+
+      - name: Run linting
+        run: npm run lint:fix
+
+      - name: Test compilation
+        run: npx wrangler deploy --dry-run --outdir dist
+        env:
+          CLOUDFLARE_API_TOKEN: dummy-token-for-dry-run
+          CLOUDFLARE_ACCOUNT_ID: dummy-account-id-for-dry-run
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: build-output
+          path: dist/
+          retention-days: 1
