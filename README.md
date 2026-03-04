@@ -49,7 +49,7 @@ The configure Claude:
 ```json
 {
   "mcpServers": {
-    "calculator": {
+    "TripGo": {
       "command": "npx",
       "args": [
         "mcp-remote",
