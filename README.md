@@ -1,4 +1,5 @@
 # TripGo MCP Server
+[![Trust Score](https://archestra.ai/mcp-catalog/api/badge/quality/skedgo/tripgo-mcp-server)](https://archestra.ai/mcp-catalog/skedgo__tripgo-mcp-server)
 
 The is a remote MCP server that wraps the TripGo API and provides the following tools:
 
