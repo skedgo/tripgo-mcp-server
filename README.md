@@ -10,9 +10,9 @@ The is a remote MCP server that wraps the TripGo API and provides the following 
 
 The MCP server is deployed on Cloudflare Workers.
 
-## Connect directly to remove MCP
+## Connect directly to remote MCP
 
-The MCP server is deployed on Cloudflare Workers. You can connect to it directly using the URL `https://tripgo-mcp-server.skedgo-account.workers.dev/sse`.
+The MCP server is deployed on Cloudflare Workers. You can connect to it directly using the URL `https://tripgo-mcp-server.skedgo-account.workers.dev/mcp`.
 
 ## Connect Claude Desktop to public MCP server
 
@@ -29,7 +29,7 @@ Use with this configuration:
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://tripgo-mcp-server.skedgo-account.workers.dev/sse"
+        "https://tripgo-mcp-server.skedgo-account.workers.dev/mcp"
       ]
     }
   }
@@ -53,7 +53,7 @@ The configure Claude:
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://localhost:8787/sse"
+        "http://localhost:8787/mcp"
       ]
     }
   }
@@ -64,7 +64,7 @@ Restart Claude and you should see the tools become available.
 
 ## Deployment
 
-This is deployed locally currently, run:
+This is deployed using GHA. To deploy locally, run:
 
 ```bash
 npm install
