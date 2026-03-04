@@ -8,17 +8,22 @@ The is a remote MCP server that wraps the TripGo API and provides the following 
 - `tripgo-routing`: Mixed and multi-modal trip planning
 - `tripgo-get-trip-url`: Get the URL of a trip previously calculated using the `tripgo-routing` tool
 
-The MCP server is deployed on Cloudflare Workers.
-
 ## Connect directly to remote MCP
 
-The MCP server is deployed on Cloudflare Workers. You can connect to it directly using the URL `https://tripgo-mcp-server.skedgo-account.workers.dev/mcp`.
+The MCP server live and you can connect to it directly using the URL `https://tripgo-mcp-server.skedgo-account.workers.dev/mcp`.
 
-## Connect Claude Desktop to public MCP server
+### Connect Claude Desktop to public MCP server
 
-You can also connect to your remote MCP server from *local* MCP clients, by using the [mcp-remote proxy](https://www.npmjs.com/package/mcp-remote).
+1. Settings
+2. Connectors
+3. Add Custom connector
+4. Name: TripGo MCP Server
+5. URL: https://tripgo-mcp-server.skedgo-account.workers.dev/mcp
+6. Add
 
-To connect to your MCP server from Claude Desktop, follow [Anthropic's Quickstart](https://modelcontextprotocol.io/quickstart/user) and within Claude Desktop go to Settings > Developer > Edit Config.
+### Connect other MCP clients to public MCP server
+
+You can also connect to the remote MCP server from apps that only work with *local* MCP clients, by using the [mcp-remote proxy](https://www.npmjs.com/package/mcp-remote).
 
 Use with this configuration:
 
@@ -35,8 +40,6 @@ Use with this configuration:
   }
 }
 ```
-
-Restart Claude and you should see the tools become available.
 
 ## Development
 
