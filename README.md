@@ -70,3 +70,8 @@ This is deployed using GHA. To deploy locally, run:
 npm install
 npm run deploy
 ```
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/skedgo-tripgo-mcp-server).
+
