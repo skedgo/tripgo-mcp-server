@@ -10,6 +10,14 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"migrations": [
+		{
+			"tag": "v2",
+			"deleted_classes": [
+				"MyMCP"
+			]
+		}
+	],
 	"observability": {
 		"enabled": true
 	}
