@@ -1,8 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { instrument } from "@posthog/mcp";
 import { registerAllTools } from "./tools";
+import { getPostHog, type PostHogEnv } from "./posthog";
 
-type WorkerEnv = {
+type WorkerEnv = PostHogEnv & {
   TRIPGO_API_KEY?: string;
 };
 
@@ -19,8 +21,9 @@ function isEventStreamResponse(response: Response): boolean {
   return contentType?.includes("text/event-stream") ?? false;
 }
 
-function withSseKeepAlive(response: Response): Response {
+function withSseKeepAlive(response: Response, onFinished: () => void): Response {
   if (!isEventStreamResponse(response) || !response.body) {
+    onFinished();
     return response;
   }
 
@@ -62,6 +65,7 @@ function withSseKeepAlive(response: Response): Response {
               // Stream is already closed/cancelled.
             }
           }
+          onFinished();
         }
       };
 
@@ -92,17 +96,48 @@ function withCorsHeaders(response: Response): Response {
   });
 }
 
-function createServer(env: WorkerEnv): McpServer {
+function createServer(env: WorkerEnv): {
+  server: McpServer;
+  posthog: ReturnType<typeof getPostHog>;
+} {
+  const posthog = getPostHog(env);
   const server = new McpServer({
     name: "TripGo MCP Toolkit",
     version: "1.0.0",
   });
+
+  if (posthog) {
+    instrument(server, posthog);
+  }
+
   registerAllTools(server, env);
-  return server;
+  return { server, posthog };
+}
+
+// The transport returns SSE responses before tools have run, so flushing has to
+// wait for the stream to end, and waitUntil keeps it off the response path.
+function flushWhenFinished(
+  ctx: ExecutionContext,
+  posthog: ReturnType<typeof getPostHog>,
+): () => void {
+  if (!posthog) {
+    return () => {};
+  }
+
+  let finish = () => {};
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  ctx.waitUntil(finished.then(() => posthog.flush()).catch(() => {}));
+  return finish;
 }
 
 export default {
-  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: WorkerEnv,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
@@ -120,11 +155,17 @@ export default {
 
     if (url.pathname === "/mcp") {
       const transport = new WebStandardStreamableHTTPServerTransport();
-      const server = createServer(env);
-      await server.connect(transport);
+      const { server, posthog } = createServer(env);
+      const finish = flushWhenFinished(ctx, posthog);
 
-      const response = await transport.handleRequest(request);
-      return withCorsHeaders(withSseKeepAlive(response));
+      try {
+        await server.connect(transport);
+        const response = await transport.handleRequest(request);
+        return withCorsHeaders(withSseKeepAlive(response, finish));
+      } catch (error) {
+        finish();
+        throw error;
+      }
     }
 
     return withCorsHeaders(new Response("Not found", { status: 404 }));
