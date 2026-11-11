@@ -1,8 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { instrument } from "@posthog/mcp";
 import { registerAllTools } from "./tools";
+import { getPostHog, type PostHogEnv } from "./posthog";
 
-type WorkerEnv = {
+type WorkerEnv = PostHogEnv & {
   TRIPGO_API_KEY?: string;
 };
 
@@ -92,13 +94,22 @@ function withCorsHeaders(response: Response): Response {
   });
 }
 
-function createServer(env: WorkerEnv): McpServer {
+function createServer(env: WorkerEnv): {
+  server: McpServer;
+  posthog: ReturnType<typeof getPostHog>;
+} {
+  const posthog = getPostHog(env);
   const server = new McpServer({
     name: "TripGo MCP Toolkit",
     version: "1.0.0",
   });
+
+  if (posthog) {
+    instrument(server, posthog);
+  }
+
   registerAllTools(server, env);
-  return server;
+  return { server, posthog };
 }
 
 export default {
@@ -120,11 +131,15 @@ export default {
 
     if (url.pathname === "/mcp") {
       const transport = new WebStandardStreamableHTTPServerTransport();
-      const server = createServer(env);
-      await server.connect(transport);
+      const { server, posthog } = createServer(env);
 
-      const response = await transport.handleRequest(request);
-      return withCorsHeaders(withSseKeepAlive(response));
+      try {
+        await server.connect(transport);
+        const response = await transport.handleRequest(request);
+        return withCorsHeaders(withSseKeepAlive(response));
+      } finally {
+        await posthog?.flush().catch(() => {});
+      }
     }
 
     return withCorsHeaders(new Response("Not found", { status: 404 }));

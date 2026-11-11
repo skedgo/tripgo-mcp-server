@@ -15,8 +15,10 @@
   "dependencies": {
     "@mapbox/polyline": "^1.2.1",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@posthog/mcp": "1.1.0",
     "@turf/boolean-point-in-polygon": "^7.2.0",
     "@turf/helpers": "^7.2.0",
+    "posthog-node": "^5.68.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
