@@ -21,8 +21,9 @@ function isEventStreamResponse(response: Response): boolean {
   return contentType?.includes("text/event-stream") ?? false;
 }
 
-function withSseKeepAlive(response: Response): Response {
+function withSseKeepAlive(response: Response, onFinished: () => void): Response {
   if (!isEventStreamResponse(response) || !response.body) {
+    onFinished();
     return response;
   }
 
@@ -64,6 +65,7 @@ function withSseKeepAlive(response: Response): Response {
               // Stream is already closed/cancelled.
             }
           }
+          onFinished();
         }
       };
 
@@ -112,8 +114,30 @@ function createServer(env: WorkerEnv): {
   return { server, posthog };
 }
 
+// The transport returns SSE responses before tools have run, so flushing has to
+// wait for the stream to end, and waitUntil keeps it off the response path.
+function flushWhenFinished(
+  ctx: ExecutionContext,
+  posthog: ReturnType<typeof getPostHog>,
+): () => void {
+  if (!posthog) {
+    return () => {};
+  }
+
+  let finish = () => {};
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  ctx.waitUntil(finished.then(() => posthog.flush()).catch(() => {}));
+  return finish;
+}
+
 export default {
-  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: WorkerEnv,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
@@ -132,13 +156,15 @@ export default {
     if (url.pathname === "/mcp") {
       const transport = new WebStandardStreamableHTTPServerTransport();
       const { server, posthog } = createServer(env);
+      const finish = flushWhenFinished(ctx, posthog);
 
       try {
         await server.connect(transport);
         const response = await transport.handleRequest(request);
-        return withCorsHeaders(withSseKeepAlive(response));
-      } finally {
-        await posthog?.flush().catch(() => {});
+        return withCorsHeaders(withSseKeepAlive(response, finish));
+      } catch (error) {
+        finish();
+        throw error;
       }
     }
 
