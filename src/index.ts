@@ -8,7 +8,7 @@ type WorkerEnv = {
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "Content-Type, mcp-session-id, mcp-protocol-version, Last-Event-ID",
   "Access-Control-Expose-Headers": "mcp-session-id, mcp-protocol-version",
@@ -119,6 +119,17 @@ export default {
     }
 
     if (url.pathname === "/mcp") {
+      // Stateless: nothing could ever be pushed on a standalone GET stream, and clients
+      // would hold it open indefinitely. The spec lets us decline it with 405.
+      if (request.method === "GET") {
+        return withCorsHeaders(
+          new Response("This server does not offer a GET SSE stream.", {
+            status: 405,
+            headers: { Allow: "POST, DELETE, OPTIONS" },
+          }),
+        );
+      }
+
       const transport = new WebStandardStreamableHTTPServerTransport();
       const server = createServer(env);
       await server.connect(transport);
