@@ -268,3 +268,27 @@ describe.each([
 		expect(result.isError).toBeFalsy();
 	});
 });
+
+describe("GET /mcp", () => {
+	it("declines the standalone SSE stream with 405", async () => {
+		const { ctx } = createContext();
+		const request = new Request("https://mcp.test/mcp", {
+			method: "GET",
+			headers: { accept: "text/event-stream" },
+		});
+
+		const response = await worker.fetch(request, env, ctx);
+
+		expect(response.status).toBe(405);
+		expect(response.headers.get("content-type") ?? "").not.toContain("text/event-stream");
+	});
+
+	it("still allows GET in the CORS preflight so browsers can see the 405", async () => {
+		const { ctx } = createContext();
+		const request = new Request("https://mcp.test/mcp", { method: "OPTIONS" });
+
+		const response = await worker.fetch(request, env, ctx);
+
+		expect(response.headers.get("access-control-allow-methods")).toContain("GET");
+	});
+});
