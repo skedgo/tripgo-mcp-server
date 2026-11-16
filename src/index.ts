@@ -8,7 +8,7 @@ type WorkerEnv = {
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "Content-Type, mcp-session-id, mcp-protocol-version, Last-Event-ID",
   "Access-Control-Expose-Headers": "mcp-session-id, mcp-protocol-version",
