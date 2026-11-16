@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { log } from "node:console";
+import { getPostHog } from "../posthog";
 import {
   coordinateInPolygon,
   toISOStringInTimezone,
@@ -22,7 +23,7 @@ export function registerTripGoTools(server: McpServer, env: any) {
   server.tool(
     "tripgo-routing",
     tripgoRoutingParams,
-    tripgoRoutingTool.execute(TRIPGO_API_KEY),
+    tripgoRoutingTool.execute(TRIPGO_API_KEY, env),
   );
 
   server.tool(
@@ -34,13 +35,13 @@ export function registerTripGoTools(server: McpServer, env: any) {
   server.tool(
     "tripgo-locations",
     tripgoLocationsParams,
-    tripgoLocationsTool.execute(TRIPGO_API_KEY),
+    tripgoLocationsTool.execute(TRIPGO_API_KEY, env),
   );
 
   server.tool(
     "tripgo-departures",
     tripgoDeparturesParams,
-    tripgoDeparturesTool.execute(TRIPGO_API_KEY),
+    tripgoDeparturesTool.execute(TRIPGO_API_KEY, env),
   );
 }
 
@@ -773,7 +774,7 @@ const tripgoRoutingTool = {
   description:
     "Plan a trip between two locations with various transportation modes",
   parameters: z.object(tripgoRoutingParams),
-  execute: (key: string) => async (params: any) => {
+  execute: (key: string, env: any) => async (params: any) => {
     try {
       const result = await handleRouting(
         key,
@@ -788,6 +789,24 @@ const tripgoRoutingTool = {
         params.wheelchair,
         params.limit,
       );
+      const routing = JSON.parse(result) as { trips?: unknown[] };
+
+      try {
+        getPostHog(env)?.capture({
+          event: "trip_routing_completed",
+          properties: {
+            trip_count: routing.trips?.length ?? 0,
+            requested_mode_count: params.modes?.length ?? 0,
+            wheelchair_requested: params.wheelchair === true,
+            time_constraint: params.departureTime
+              ? "departure"
+              : params.arrivalTime
+                ? "arrival"
+                : "none",
+          },
+        });
+      } catch {}
+
       return {
         content: [{ type: "text" as const, text: String(result) }]
       };
@@ -847,7 +866,7 @@ const tripgoLocationsTool = {
   name: "tripgo_locations",
   description: "Search for locations near a specified point",
   parameters: z.object(tripgoLocationsParams),
-  execute: (key: string) => async (params: any) => {
+  execute: (key: string, env: any) => async (params: any) => {
     try {
       const result = await handleLocationsSearch(
         key,
@@ -857,9 +876,26 @@ const tripgoLocationsTool = {
         params.modes,
         params.limit,
       );
+      const structuredContent = JSON.parse(result) as {
+        groups?: unknown[];
+        totalLocations?: number;
+      };
+
+      try {
+        getPostHog(env)?.capture({
+          event: "location_search_completed",
+          properties: {
+            location_count: structuredContent.totalLocations ?? 0,
+            group_count: structuredContent.groups?.length ?? 0,
+            requested_mode_count: params.modes?.length ?? 0,
+            radius_specified: params.radius !== undefined,
+          },
+        });
+      } catch {}
+
       return {
         content: [{ type: "text" as const, text: String(result) }],
-        structuredContent: JSON.parse(result),
+        structuredContent,
       };
     } catch (error) {
       throw new Error(
@@ -888,7 +924,7 @@ const tripgoDeparturesTool = {
   name: "tripgo_departures",
   description: "Get departures from a list of stops",
   parameters: z.object(tripgoDeparturesParams),
-  execute: (key: string) => async (params: any) => {
+  execute: (key: string, env: any) => async (params: any) => {
     try {
       const result = await handleDepartures(
         key,
@@ -897,9 +933,24 @@ const tripgoDeparturesTool = {
         params.timeStamp,
         params.limit,
       );
+      const structuredContent = JSON.parse(result) as {
+        departures?: unknown[];
+      };
+
+      try {
+        getPostHog(env)?.capture({
+          event: "departures_retrieved",
+          properties: {
+            departure_count: structuredContent.departures?.length ?? 0,
+            requested_stop_count: params.stopCodes.length,
+            time_specified: params.timeStamp !== undefined,
+          },
+        });
+      } catch {}
+
       return {
         content: [{ type: "text" as const, text: String(result) }],
-        structuredContent: JSON.parse(result),
+        structuredContent,
       };
     } catch (error) {
       throw new Error(
