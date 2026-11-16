@@ -154,6 +154,17 @@ export default {
     }
 
     if (url.pathname === "/mcp") {
+      // Stateless: nothing could ever be pushed on a standalone GET stream, and clients
+      // would hold it open indefinitely. The spec lets us decline it with 405.
+      if (request.method === "GET") {
+        return withCorsHeaders(
+          new Response("This server does not offer a GET SSE stream.", {
+            status: 405,
+            headers: { Allow: "POST, DELETE, OPTIONS" },
+          }),
+        );
+      }
+
       const transport = new WebStandardStreamableHTTPServerTransport();
       const { server, posthog } = createServer(env);
       const finish = flushWhenFinished(ctx, posthog);
