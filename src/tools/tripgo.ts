@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { log } from "node:console";
-import { getPostHog } from "../posthog";
+import { getPostHog, POSTHOG_SERVER } from "../posthog";
 import {
   coordinateInPolygon,
   toISOStringInTimezone,
@@ -795,6 +795,7 @@ const tripgoRoutingTool = {
         getPostHog(env)?.capture({
           event: "trip_routing_completed",
           properties: {
+            server: POSTHOG_SERVER,
             trip_count: routing.trips?.length ?? 0,
             requested_mode_count: params.modes?.length ?? 0,
             wheelchair_requested: params.wheelchair === true,
@@ -885,6 +886,7 @@ const tripgoLocationsTool = {
         getPostHog(env)?.capture({
           event: "location_search_completed",
           properties: {
+            server: POSTHOG_SERVER,
             location_count: structuredContent.totalLocations ?? 0,
             group_count: structuredContent.groups?.length ?? 0,
             requested_mode_count: params.modes?.length ?? 0,
@@ -941,6 +943,7 @@ const tripgoDeparturesTool = {
         getPostHog(env)?.capture({
           event: "departures_retrieved",
           properties: {
+            server: POSTHOG_SERVER,
             departure_count: structuredContent.departures?.length ?? 0,
             requested_stop_count: params.stopCodes.length,
             time_specified: params.timeStamp !== undefined,

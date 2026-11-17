@@ -247,7 +247,9 @@ describe.each([
 		const result = await invokeTool(tool, args);
 
 		expect(result.isError).toBeFalsy();
-		expect(customEvents()).toEqual([expected]);
+		expect(customEvents()).toEqual([
+			{ ...expected, properties: { ...expected.properties, server: "standalone" } },
+		]);
 	});
 
 	it("captures nothing when TripGo returns an error", async () => {
@@ -290,5 +292,41 @@ describe("GET /mcp", () => {
 		const response = await worker.fetch(request, env, ctx);
 
 		expect(response.headers.get("access-control-allow-methods")).toContain("GET");
+	});
+});
+
+describe("PostHog tagging", () => {
+	async function listTools(workerEnv: Record<string, string>) {
+		const { ctx, settled } = createContext();
+		const response = await worker.fetch(
+			new Request("https://mcp.test/mcp", {
+				method: "POST",
+				headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+				body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+			}),
+			workerEnv,
+			ctx,
+		);
+		const text = await response.text();
+		await settled();
+		const data = text.split("\n").find((line) => line.startsWith("data: "));
+		return JSON.parse(data?.slice("data: ".length) ?? text).result.tools;
+	}
+
+	it("tags auto-captured events with the server", async () => {
+		stubTripGo({ groups: [] });
+
+		await invokeTool("tripgo-locations", locationsArgs);
+
+		const toolCall = posthog.events.find(({ event }) => event === "$mcp_tool_call");
+		expect(toolCall?.properties.server).toBe("standalone");
+	});
+
+	it("leaves the advertised tool schemas unchanged", async () => {
+		const plain = await listTools({ TRIPGO_API_KEY: "k" });
+		const instrumented = await listTools(env);
+
+		expect(plain.length).toBeGreaterThan(0);
+		expect(instrumented).toEqual(plain);
 	});
 });

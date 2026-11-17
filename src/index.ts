@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { instrument } from "@posthog/mcp";
 import { registerAllTools } from "./tools";
-import { getPostHog, type PostHogEnv } from "./posthog";
+import { getPostHog, POSTHOG_SERVER, type PostHogEnv } from "./posthog";
 
 type WorkerEnv = PostHogEnv & {
   TRIPGO_API_KEY?: string;
@@ -107,7 +107,13 @@ function createServer(env: WorkerEnv): {
   });
 
   if (posthog) {
-    instrument(server, posthog);
+    instrument(server, posthog, {
+      eventProperties: () => ({ server: POSTHOG_SERVER }),
+      // Each would add a parameter to every tool's schema, changing what the model sees.
+      context: false,
+      enableConversationId: false,
+      captureModel: false,
+    });
   }
 
   registerAllTools(server, env);
