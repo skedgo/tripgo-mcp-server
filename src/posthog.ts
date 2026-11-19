@@ -5,6 +5,9 @@ export type PostHogEnv = {
 	POSTHOG_HOST?: string;
 };
 
+// Tags every event, so this server can be told apart from the tripgo-ai ones in the shared project.
+export const POSTHOG_SERVER = "standalone";
+
 const clients = new Map<string, PostHog>();
 
 function warnMissingConfig(variable: keyof PostHogEnv): void {
